@@ -1,0 +1,170 @@
+openapi: 3.1.0
+# Contract 2 — the ingest API. Person C DEFINES this; Person B mocks against it.
+# FROZEN: changes are a team decision (editing invalidates B's mocks). Source: docs/M1/03-backend-gcp.md §2.
+info:
+  title: fsd-ingest
+  version: "m1"
+  description: >
+    M1 ingest API. Accepts trips, events, and breadcrumbs from the Flutter app.
+    Blobs (audio/sensor) are NOT in request bodies — the app PUTs them to the returned signed GCS URLs.
+
+servers:
+  - url: https://REGION-run.googleapis.com   # Cloud Run; set per env
+
+security:
+  - firebaseBearer: []
+
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+  /v1/trips:
+    post:
+      summary: Create/upsert a trip (idempotent on id)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TripIn" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/events:
+    post:
+      summary: Create/upsert an event; returns signed URLs for direct blob upload
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventIn" }
+      responses:
+        "200":
+          description: OK — signed upload URLs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventUploadResponse" }
+        "400": { description: Missing Idempotency-Key header }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/breadcrumbs:
+    post:
+      summary: Create/upsert a breadcrumb segment (idempotent)
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BreadcrumbIn" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResponse" }
+        "400": { description: Missing Idempotency-Key header }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+components:
+  securitySchemes:
+    firebaseBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT   # Firebase ID token, validated by the Admin SDK
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing/invalid Firebase token
+    ValidationError:
+      description: Pydantic validation failed
+
+  schemas:
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean, example: true }
+
+    EventUploadResponse:
+      type: object
+      required: [audio_upload, sensor_upload]
+      properties:
+        audio_upload: { type: string, format: uri, description: Signed PUT URL for audio.wav }
+        sensor_upload: { type: string, format: uri, description: Signed PUT URL for sensors.json }
+
+    TripIn:
+      type: object
+      required: [id, user_id, provider, supervision, app_config_version, started_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, description: Firebase uid }
+        provider: { type: string, example: tesla }
+        fsd_version: { type: string, nullable: true }
+        supervision: { type: boolean }
+        vehicle: { type: string, nullable: true }
+        device_info: { type: object, additionalProperties: true, default: {} }
+        app_config_version: { type: string }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time, nullable: true }
+        metrics: { type: object, additionalProperties: true, default: {} }
+
+    EventIn:
+      type: object
+      required: [id, trip_id, t_trigger, t_pre_seconds, t_post_seconds, trigger_source]
+      properties:
+        id: { type: string, format: uuid }
+        trip_id: { type: string, format: uuid }
+        t_trigger: { type: string, format: date-time }
+        t_pre_seconds: { type: number }
+        t_post_seconds: { type: number }
+        trigger_source: { type: string, enum: [voice, tap, imu] }
+        event_type: { type: string, default: incident }
+        severity: { type: integer, minimum: 1, maximum: 5, nullable: true }
+        features: { type: object, additionalProperties: true, default: {} }   # the attributes bag — carry through verbatim
+        raw_lat: { type: number, nullable: true }
+        raw_lon: { type: number, nullable: true }
+        raw_accuracy_m: { type: number, nullable: true }
+
+    BreadcrumbIn:
+      type: object
+      required: [id, trip_id, track]
+      properties:
+        id: { type: string, format: uuid }
+        trip_id: { type: string, format: uuid }
+        track:
+          type: object
+          description: GeoJSON LineString
+          properties:
+            type: { type: string, enum: [LineString] }
+            coordinates:
+              type: array
+              items: { type: array, items: { type: number } }
+        motion_summary: { type: object, additionalProperties: true, default: {} }

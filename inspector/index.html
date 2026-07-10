@@ -1,0 +1,80 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>FSD Benchmark — M1 inspector</title>
+<!-- Data-quality inspector (docs/M1/04-inspection-ui.md, Option A). NOT a product. Thin + static.
+     Reads two read-only endpoints from the ingest service. Basemap: swap demotiles for a self-hosted
+     OSS basemap (OpenFreeMap / Protomaps PMTiles) for anything you keep — no proprietary tile key. -->
+<link href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; }
+  #map { position: absolute; inset: 0; }
+  #row { position: absolute; right: 8px; top: 8px; max-width: 320px; z-index: 1;
+         font: 12px/1.4 system-ui, sans-serif; background: #fff; color: #111;
+         padding: 8px 10px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.3); display: none; }
+  #row pre { margin: 0; white-space: pre-wrap; }
+</style>
+<div id="map"></div>
+<div id="row"><pre></pre></div>
+<script>
+  // Endpoint base — same-origin when served by FastAPI, override with ?api=… for local dev.
+  const API = new URLSearchParams(location.search).get("api") || "";
+
+  const map = new maplibregl.Map({
+    container: "map",
+    style: "https://demotiles.maplibre.org/style.json", // OSS demo basemap; swap for self-hosted PMTiles
+    center: [-122.4194, 37.7749], // San Francisco
+    zoom: 12,
+  });
+
+  function showRow(props) {
+    const el = document.getElementById("row");
+    el.style.display = "block";
+    el.querySelector("pre").textContent = JSON.stringify(props, null, 2);
+  }
+
+  map.on("load", async () => {
+    // Segments colored by severity_per_mile; gated/thin roads render gray + dashed (M1 anti-misleading).
+    const seg = await (await fetch(`${API}/v1/inspect/segments.geojson`)).json();
+    map.addSource("seg", { type: "geojson", data: seg });
+    map.addLayer({
+      id: "seg", type: "line", source: "seg",
+      paint: {
+        "line-color": ["case", ["get", "gated"], "#999999",
+          ["interpolate", ["linear"], ["get", "severity_per_mile"],
+            0, "#2ca25f", 0.1, "#fec44f", 0.2, "#de2d26"]],
+        "line-width": 4,
+        "line-dasharray": ["case", ["get", "gated"], ["literal", [2, 2]], ["literal", [1, 0]]],
+      },
+    });
+
+    // Events: snapped points...
+    const ev = await (await fetch(`${API}/v1/inspect/events.geojson`)).json();
+    map.addSource("ev", { type: "geojson", data: ev });
+    map.addLayer({
+      id: "ev", type: "circle", source: "ev",
+      paint: { "circle-radius": 5, "circle-color": "#3182bd",
+               "circle-stroke-color": "#fff", "circle-stroke-width": 1 },
+    });
+
+    // ...and the raw→snapped line: THIS line is the risk #2 map-match-error check.
+    // Endpoint returns each event with raw_lat/raw_lon and snapped coords; draw the connector.
+    const links = {
+      type: "FeatureCollection",
+      features: (ev.features || [])
+        .filter((f) => f.properties && f.properties.raw_lon != null)
+        .map((f) => ({
+          type: "Feature",
+          geometry: { type: "LineString",
+            coordinates: [[f.properties.raw_lon, f.properties.raw_lat], f.geometry.coordinates] },
+          properties: { event_id: f.properties.event_id, raw_accuracy_m: f.properties.raw_accuracy_m },
+        })),
+    };
+    map.addSource("link", { type: "geojson", data: links });
+    map.addLayer({ id: "link", type: "line", source: "link",
+      paint: { "line-color": "#e6550d", "line-width": 1.5 } });
+
+    map.on("click", "seg", (e) => showRow(e.features[0].properties));
+    map.on("click", "ev", (e) => showRow(e.features[0].properties));
+  });
+</script>
