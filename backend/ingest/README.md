@@ -28,7 +28,7 @@ app/
 ├── ports.py       StoragePort (GCS signed URLs), AuthPort (Firebase) — the fakeable seams
 ├── storage.py     GcsStorage: real StoragePort over google-cloud-storage (V4 signed PUT URLs)
 ├── auth.py        FirebaseAuth: real AuthPort over firebase-admin
-├── repository.py  Repository protocol + SqlRepository (writes A's schema; filled in Cycle 2)
+├── repository.py  Repository protocol + SqlRepository (psycopg pool; writes A's schema, idempotent)
 └── deps.py        AppState — the composition root tests override with fakes
 ```
 
@@ -77,15 +77,22 @@ curl localhost:8000/healthz        # → {"status":"ok"}
 The real server uses `build_production_app` (the container entrypoint), which wires the live GCS,
 Firebase, and DB ports from `GCS_BUCKET`, `FIREBASE_PROJECT_ID`, and `DATABASE_URL`.
 
-### 3. Integration (Cycle 2+, real local PostGIS)
+### 3. Persistence integration (real local PostGIS)
 
 ```bash
 docker run -d --name fsd-pg-test -p 5433:5432 \
   -e POSTGRES_USER=app -e POSTGRES_PASSWORD=app -e POSTGRES_DB=fsd_test postgis/postgis:16-3.4
+pytest backend/ingest/tests/test_persistence_integration.py    # skips cleanly if no DB
 ```
 
-Load A's `db/schema.sql` into that DB, then `SqlRepository` tests assert one-row persistence and
-idempotency against the real constraint. **Do not fake PostGIS** — it's the seam most likely to break.
+`test_persistence_integration.py` loads the schema, wires the real `SqlRepository`, and asserts
+one-row persistence, idempotent retries, `user_id` = authenticated uid, breadcrumb geography, and a
+409 on event-before-trip. **Do not fake PostGIS** — it's the seam most likely to break.
+
+> Schema source: until Person A ships `db/schema.sql`, the tests load `tests/contract_schema.sql`, a
+> verbatim mirror of the frozen Contract-1 DDL. Repoint the fixture at `db/schema.sql` and delete the
+> mirror once it exists. Use `127.0.0.1` (not `localhost`) in the DB URL on Windows to avoid a ~5s
+> IPv6 connect stall.
 
 ## Build & deploy
 
