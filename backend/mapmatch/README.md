@@ -20,12 +20,14 @@ raw GPS point/track ─► ValhallaMatcher ─► Valhalla /trace_attributes ─
 It's a thin client over **Valhalla**, an OSS routing/map-matching engine loaded with San Francisco
 OSM road data. Valhalla's `/trace_attributes` endpoint (the "Meili" map-matching algorithm) does the
 heavy lifting; [`valhalla.py`](./valhalla.py) just calls it and extracts what the rest of the system
-needs. Two operations:
+needs. Two operations, each on the right Valhalla endpoint:
 
-- `match_event(lat, lon)` → snaps a **single incident point** to its road → fills `events.way_id`
-  and `events.geom`.
-- `match_track(track_geojson)` → snaps a **whole trip breadcrumb** and returns the ordered road edges,
-  so their lengths sum into `segment_exposure` (the "miles" denominator for scoring).
+- `match_event(lat, lon)` → snaps a **single incident point** to its road via **`/locate`** (Meili
+  map-matching needs ≥2 points; `/trace_attributes` answers 400 "Insufficient shape" on one). Fills
+  `events.way_id`/`events.geom`; `length_mi` is 0.0 (a point has no exposure length).
+- `match_track(track_geojson)` → snaps a **whole trip breadcrumb** via **`/trace_attributes`** and
+  returns the ordered road edges, so their lengths sum into `segment_exposure` (the "miles"
+  denominator for scoring).
 
 ## The contract seam (Contract 3) — why this module matters
 
@@ -76,18 +78,18 @@ docker run -d --name valhalla -p 8002:8002 \
 ## Test steps
 
 ```bash
-# Contract type check — no Valhalla needed, runs everywhere:
-pytest backend/mapmatch/tests/test_mapmatcher_integration.py::test_matcher_satisfies_contract -q
+# Pure parsing/unit tests — no Valhalla needed, run everywhere:
+pytest backend/mapmatch/tests/test_valhalla_parse.py -q
 
 # Full integration — needs the local Valhalla above:
 VALHALLA_URL=http://localhost:8002 pytest -m integration
 ```
 
-Current state of the scaffold:
-- `test_matcher_satisfies_contract` **passes** — pure check that `MatchedEdge` matches what A expects.
-- `test_known_point_matches_expected_way`, `test_track_returns_ordered_edges`,
-  `test_offroad_point_returns_none` are **`xfail`** until a local Valhalla is up (Cycle 4). Flip them
-  to real assertions by starting Valhalla and filling in a verified `KNOWN_WAY_ID`.
+- `test_valhalla_parse.py` covers the HTTP-free logic (polyline decode, km→mi, `/locate` + track
+  parsing, the `_is_no_match` swallow/raise decision) — **always green**.
+- `test_mapmatcher_integration.py` runs against a real Valhalla and **skips cleanly when none is
+  reachable** (not xfail). It includes the risk-#2 labelled SF points, which assert both the correct
+  `way_id` and a small snapped-distance.
 
 ## Deploy target
 
@@ -96,8 +98,12 @@ Valhalla runs as a container. For M1's tiny SF dataset:
 - **Cloud Run gen2** — scale-to-zero, with tiles baked into the image or pulled from the
   `${PROJECT}-osm` bucket at start.
 
-## Known gaps in the scaffold (Cycle 4 work)
+## Status
 
-- `_parse_edges` treats Valhalla's `edge.length` as kilometers → miles; verify against the live API.
-- `snapped_geojson` is currently a `{}` stub — building the real snapped Point/LineString from
-  Valhalla's `matched_points` is the remaining Cycle-4 task.
+Cycle 4 complete: `ValhallaMatcher` implements Contract 3 against a real local Valhalla — events via
+`/locate`, tracks via `/trace_attributes` — with polyline-decoded snapped geometry, km→mi exposure,
+and no-match handling verified against the live norcal instance. Unit tests are green everywhere;
+integration tests pass against local Valhalla and skip when it's down.
+
+Follow-ups for later milestones: grow the labelled SF regression set (`LABELLED_SF_POINTS`) as more
+corners are verified, and deploy Valhalla per the targets above at Checkpoint 2.
