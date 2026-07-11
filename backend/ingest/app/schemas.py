@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TripIn(BaseModel):
@@ -44,6 +44,16 @@ class EventIn(BaseModel):
 class GeoJSONLineString(BaseModel):
     type: Literal["LineString"]
     coordinates: list[list[float]]
+
+    @field_validator("coordinates")
+    @classmethod
+    def _valid_linestring(cls, v: list[list[float]]) -> list[list[float]]:
+        # Reject degenerate geometry at the schema (422) rather than letting ST_GeomFromGeoJSON 500.
+        if len(v) < 2:
+            raise ValueError("LineString needs at least 2 positions")
+        if any(len(pos) != 2 for pos in v):
+            raise ValueError("each position must be [lon, lat]")
+        return v
 
 
 class BreadcrumbIn(BaseModel):

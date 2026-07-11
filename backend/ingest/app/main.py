@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import os
 
+import psycopg
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from .auth import bearer_from_header
 from .deps import AppState
@@ -39,6 +41,12 @@ def require_idempotency_key(idempotency_key: str | None = Header(default=None, a
 def create_app(state: AppState) -> FastAPI:
     app = FastAPI(title="fsd-ingest", version="m1")
     app.state.deps = state
+
+    @app.exception_handler(psycopg.errors.IntegrityError)
+    async def _integrity_conflict(request: Request, exc: psycopg.errors.IntegrityError) -> JSONResponse:
+        # FK miss (e.g. event before its trip) or an unexpected unique clash → a clean 409, not a 500.
+        # The idempotency happy path never reaches here (ON CONFLICT DO NOTHING swallows it).
+        return JSONResponse(status_code=409, content={"detail": "integrity conflict"})
 
     @app.get("/healthz")
     async def health() -> dict[str, str]:

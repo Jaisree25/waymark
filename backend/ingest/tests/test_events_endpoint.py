@@ -64,6 +64,14 @@ def test_missing_auth_401(client):
     assert r.status_code == 401
 
 
+def test_breadcrumb_rejects_degenerate_geometry(client):
+    # Bad geometry must 422 at the schema, not 500 later in ST_GeomFromGeoJSON.
+    for coords in ([], [[1.0]], [[1.0, 2.0]]):  # empty, single-scalar position, single point
+        bad = {**GOLDEN_BREADCRUMB_IN, "track": {"type": "LineString", "coordinates": coords}}
+        r = client.post("/v1/breadcrumbs", json=bad, headers={**AUTH_HEADERS, "Idempotency-Key": "bad"})
+        assert r.status_code == 422, coords
+
+
 def test_duplicate_idempotency_key_is_noop(client, fake_repo):
     headers = {**AUTH_HEADERS, "Idempotency-Key": "dupe"}
     r1 = client.post("/v1/events", json=GOLDEN_EVENT_IN, headers=headers)
