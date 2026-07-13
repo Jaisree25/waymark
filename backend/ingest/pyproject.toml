@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+# Run from backend/ingest/ so `import app...` and `from .fixtures import ...` resolve.
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "integration: needs real local PostGIS/Valhalla (slower; run in CI)",
+]

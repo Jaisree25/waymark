@@ -1,0 +1,10 @@
+# Repo-root pytest config (Person C). Lets `pytest` run the whole backend suite from the root.
+# pythonpath makes both the shared packages (contracts/, backend/) and the ingest app importable.
+# (Running pytest from inside backend/ingest/ still works — it uses that dir's own pyproject.toml.)
+[tool.pytest.ini_options]
+testpaths = ["backend/ingest/tests", "backend/mapmatch/tests"]
+pythonpath = [".", "backend/ingest"]
+addopts = "-ra"
+markers = [
+    "integration: needs real local PostGIS/Valhalla (slower; run in CI)",
+]

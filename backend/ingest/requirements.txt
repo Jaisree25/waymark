@@ -1,0 +1,11 @@
+# Ingest API (Person C). Caret-style pins — verify newest patch at build time.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.9
+psycopg[binary]>=3.2
+psycopg_pool>=3.2
+sqlalchemy>=2.0
+geoalchemy2>=0.15
+google-cloud-storage>=2.18
+firebase-admin>=6.5
+httpx>=0.27

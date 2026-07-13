@@ -1,0 +1,23 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+*.auto.tfvars
+
+# Secrets / creds
+*.env
+service-account*.json
+
+# Valhalla / OSM data (large; fetched at build time)
+backend/mapmatch/data/
+*.osm.pbf
+
+# Local-only project guidance
+CLAUDE.md
