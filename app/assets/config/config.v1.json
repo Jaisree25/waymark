@@ -1,0 +1,13 @@
+{
+  "keywords": ["log it", "log scary", "mark level one", "mark level two", "mark level three", "mark level four", "mark level five"],
+  "t_pre_seconds": 10,
+  "t_post_seconds": 5,
+  "ring_capacity_seconds": 30,
+  "wifi_preferred": true,
+  "ingest_base_url": "TODO_CLOUD_RUN_URL",
+  "ui": {
+    "flash_duration_ms": 800,
+    "chime_asset": "assets/sounds/chime.mp3",
+    "timer_update_interval_ms": 1000
+  }
+}

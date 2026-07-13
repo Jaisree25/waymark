@@ -1,0 +1,11 @@
+# drift codegen options.
+#
+# Store DateTime columns as ISO-8601 TEXT (UTC-preserving, sub-second, human
+# readable) instead of the legacy Unix-seconds-in-local-time default. This keeps
+# the outbox's created_at timezone-correct across a restart.
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          store_date_time_values_as_text: true
