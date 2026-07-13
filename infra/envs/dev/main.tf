@@ -60,10 +60,45 @@ resource "google_storage_bucket" "osm" {
   uniform_bucket_level_access = true
 }
 
+# Phone-uploaded blobs (event audio/sensors) land here via V4 signed PUT URLs — direct from the
+# device, never proxied through Cloud Run. Short-lived: raw uploads age out after 30 days.
+resource "google_storage_bucket" "uploads" {
+  name                        = "${var.project}-uploads"
+  location                    = var.region
+  uniform_bucket_level_access = true
+  lifecycle_rule {
+    condition { age = 30 }
+    action { type = "Delete" }
+  }
+}
+
+# Runtime identity for the ingest service. It mints the signed URLs and owns the uploads objects.
+resource "google_service_account" "ingest" {
+  account_id   = "fsd-ingest"
+  display_name = "FSD ingest API (Cloud Run) — signs upload URLs, writes uploads bucket"
+}
+
+# The ingest SA reads/writes only the uploads bucket (not artifacts/osm).
+resource "google_storage_bucket_iam_member" "ingest_uploads" {
+  bucket = google_storage_bucket.uploads.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.ingest.email}"
+}
+
+# Keyless V4 signing: let the SA sign blobs by calling IAM SignBlob on ITSELF, so no private key
+# file is ever downloaded or committed. On Cloud Run the runtime SA has no key; this self-binding is
+# what lets generate_signed_url() work. To sign locally, impersonate this SA (also needs this role).
+resource "google_service_account_iam_member" "ingest_self_signer" {
+  service_account_id = google_service_account.ingest.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.ingest.email}"
+}
+
 resource "google_cloud_run_v2_service" "ingest" {
   name     = "fsd-ingest"
   location = var.region
   template {
+    service_account = google_service_account.ingest.email
     containers {
       image = var.ingest_image
       env {
@@ -72,7 +107,7 @@ resource "google_cloud_run_v2_service" "ingest" {
       }
       env {
         name  = "GCS_BUCKET"
-        value = google_storage_bucket.artifacts.name
+        value = google_storage_bucket.uploads.name
       }
       env {
         name  = "FIREBASE_PROJECT_ID"
