@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars (gitignored) or pass via TF_VAR_*. Secrets belong in Secret Manager.
+project      = "fsd-benchmark-prod"
+region       = "us-west1"
+ingest_image = "us-west1-docker.pkg.dev/fsd-benchmark-prod/fsd/ingest:m1"
+runner_sa    = "fsd-runner@fsd-benchmark-prod.iam.gserviceaccount.com"
+# db_password / database_url — DO NOT put here. Use TF_VAR_db_password / Secret Manager.
