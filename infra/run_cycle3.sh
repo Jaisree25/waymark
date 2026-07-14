@@ -90,16 +90,6 @@ SIGNER_SA="$(terraform output -raw ingest_sa_email)"
 [[ -n "$SIGNER_SA" ]] || die "could not read ingest_sa_email output"
 ok "ingest signer SA: $SIGNER_SA"
 
-# Local keyless signing: user ADC can't sign V4 URLs, so we impersonate the ingest SA. That needs
-# the running user to hold tokenCreator ON that SA (idempotent to add; may take ~1 min to propagate).
-ACTIVE_ACCT="$(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
-info "granting $ACTIVE_ACCT impersonation on $SIGNER_SA ..."
-gcloud iam service-accounts add-iam-policy-binding "$SIGNER_SA" \
-  --member="user:$ACTIVE_ACCT" --role="roles/iam.serviceAccountTokenCreator" \
-  --condition=None >/dev/null || die "could not grant tokenCreator on the ingest SA"
-ok "impersonation granted"
-
-# ---------- run the test ----------
 # Pick the venv python (Windows or POSIX layout), else fall back to system python.
 if   [[ -x "$INGEST_DIR/.venv/Scripts/python.exe" ]]; then PY="$INGEST_DIR/.venv/Scripts/python.exe"
 elif [[ -x "$INGEST_DIR/.venv/bin/python"        ]]; then PY="$INGEST_DIR/.venv/bin/python"
@@ -111,6 +101,42 @@ if ! "$PY" -c "import google.cloud.storage, httpx" >/dev/null 2>&1; then
   info "installing google-cloud-storage + httpx into the venv ..."
   "$PY" -m pip install -q "google-cloud-storage>=2.18" "httpx>=0.27" pytest || die "pip install failed"
 fi
+
+# Local keyless signing impersonates the ingest SA, so the identity that signs must hold tokenCreator
+# ON that SA. CAREFUL: the signer is the Application Default Credentials identity (what the Python
+# client uses) — NOT necessarily the active `gcloud` CLI account. Grant to the ADC identity.
+ADC_TOKEN="$(gcloud auth application-default print-access-token)"
+ADC_EMAIL="$("$PY" -c 'import sys,json,urllib.request; print(json.load(urllib.request.urlopen("https://oauth2.googleapis.com/tokeninfo?access_token="+sys.argv[1])).get("email",""))' "$ADC_TOKEN")"
+case "$ADC_EMAIL" in
+  "")                     die "could not determine ADC identity email (missing email scope?)" ;;
+  *.gserviceaccount.com)  ADC_MEMBER="serviceAccount:$ADC_EMAIL" ;;
+  *)                      ADC_MEMBER="user:$ADC_EMAIL" ;;
+esac
+info "ADC identity: $ADC_EMAIL  (CLI active: $(gcloud config get-value account 2>/dev/null))"
+info "granting $ADC_MEMBER tokenCreator on $SIGNER_SA ..."
+gcloud iam service-accounts add-iam-policy-binding "$SIGNER_SA" \
+  --member="$ADC_MEMBER" --role="roles/iam.serviceAccountTokenCreator" \
+  --condition=None >/dev/null || die "could not grant tokenCreator (need admin on the SA)"
+ok "granted"
+
+# IAM grants take a bit to propagate; poll (impersonating exactly as the test will) before running.
+info "waiting for impersonation to propagate (up to ~90s) ..."
+"$PY" - "$SIGNER_SA" <<'PY' && ok "impersonation active" || warn "not confirmed; running test anyway"
+import sys, time
+import google.auth
+from google.auth import impersonated_credentials
+from google.auth.transport.requests import Request
+scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+src, _ = google.auth.default(scopes=scopes)
+creds = impersonated_credentials.Credentials(
+    source_credentials=src, target_principal=sys.argv[1], target_scopes=scopes)
+for _ in range(18):
+    try:
+        creds.refresh(Request()); sys.exit(0)
+    except Exception:
+        time.sleep(5)
+sys.exit(1)
+PY
 
 info "running the signed-URL roundtrip against $BUCKET (impersonating $SIGNER_SA) ..."
 set +e
