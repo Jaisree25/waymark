@@ -86,6 +86,19 @@ BUCKET="$(terraform output -raw uploads_bucket)"
 [[ -n "$BUCKET" ]] || die "could not read uploads_bucket output"
 ok "uploads bucket: $BUCKET"
 
+SIGNER_SA="$(terraform output -raw ingest_sa_email)"
+[[ -n "$SIGNER_SA" ]] || die "could not read ingest_sa_email output"
+ok "ingest signer SA: $SIGNER_SA"
+
+# Local keyless signing: user ADC can't sign V4 URLs, so we impersonate the ingest SA. That needs
+# the running user to hold tokenCreator ON that SA (idempotent to add; may take ~1 min to propagate).
+ACTIVE_ACCT="$(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
+info "granting $ACTIVE_ACCT impersonation on $SIGNER_SA ..."
+gcloud iam service-accounts add-iam-policy-binding "$SIGNER_SA" \
+  --member="user:$ACTIVE_ACCT" --role="roles/iam.serviceAccountTokenCreator" \
+  --condition=None >/dev/null || die "could not grant tokenCreator on the ingest SA"
+ok "impersonation granted"
+
 # ---------- run the test ----------
 # Pick the venv python (Windows or POSIX layout), else fall back to system python.
 if   [[ -x "$INGEST_DIR/.venv/Scripts/python.exe" ]]; then PY="$INGEST_DIR/.venv/Scripts/python.exe"
@@ -99,9 +112,10 @@ if ! "$PY" -c "import google.cloud.storage, httpx" >/dev/null 2>&1; then
   "$PY" -m pip install -q "google-cloud-storage>=2.18" "httpx>=0.27" pytest || die "pip install failed"
 fi
 
-info "running the signed-URL roundtrip against $BUCKET ..."
+info "running the signed-URL roundtrip against $BUCKET (impersonating $SIGNER_SA) ..."
 set +e
-TEST_GCS_BUCKET="$BUCKET" "$PY" -m pytest -m integration -v tests/test_signed_url_roundtrip.py
+TEST_GCS_BUCKET="$BUCKET" INGEST_SIGNER_SA="$SIGNER_SA" \
+  "$PY" -m pytest -m integration -v tests/test_signed_url_roundtrip.py
 RC=$?
 set -e
 
