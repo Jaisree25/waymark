@@ -52,8 +52,10 @@ command -v gcloud    >/dev/null || die "gcloud not found."
 command -v terraform >/dev/null || die "terraform not found."
 gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null | grep -q . \
   || die "no active gcloud account. Run: gcloud auth login"
-gcloud auth application-default print-access-token >/dev/null 2>&1 \
-  || die "no Application Default Credentials. Run: gcloud auth application-default login"
+if ! ADC_ERR="$(gcloud auth application-default print-access-token 2>&1 >/dev/null)"; then
+  [[ -n "$ADC_ERR" ]] && warn "gcloud: $ADC_ERR"
+  die "no valid Application Default Credentials. Run: gcloud auth application-default login"
+fi
 
 # Resolve the project: explicit PROJECT env wins, else the active gcloud project.
 PROJECT="${PROJECT:-$(gcloud config get-value project 2>/dev/null)}"
