@@ -4,4 +4,5 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
     "integration: needs real local PostGIS/Valhalla (slower; run in CI)",
+    "smoke: post-deploy checks against a real deployed URL (needs INGEST_URL)",
 ]
