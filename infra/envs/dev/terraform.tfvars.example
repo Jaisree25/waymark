@@ -2,5 +2,10 @@
 project      = "fsd-benchmark-dev"
 region       = "us-west1"
 ingest_image = "us-west1-docker.pkg.dev/fsd-benchmark-dev/fsd/ingest:m1"
-runner_sa    = "fsd-runner@fsd-benchmark-dev.iam.gserviceaccount.com"
-# db_password / database_url — DO NOT put here. Use TF_VAR_db_password / Secret Manager.
+
+# db_password — DO NOT put here. Use TF_VAR_db_password / Secret Manager. DATABASE_URL is derived
+# from the Cloud SQL instance by the stack module, so you don't set it.
+
+# Only needed when enable_aggregate = true (A's nightly image is published):
+# aggregate_image = "us-west1-docker.pkg.dev/fsd-benchmark-dev/fsd/aggregate:m1"
+# runner_sa       = "fsd-runner@fsd-benchmark-dev.iam.gserviceaccount.com"

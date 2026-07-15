@@ -2,6 +2,13 @@
 # Behaviour that differs per env is driven by variables (deletion_protection, db_tier, HA); resource
 # names are stable across envs because each env is a SEPARATE GCP project (no name collisions).
 
+locals {
+  # Cloud Run reaches Cloud SQL over the built-in unix socket (/cloudsql/<connection_name>). We
+  # construct the DSN here from the instance rather than taking it as an input, so it's always
+  # consistent with the DB this stack creates. psycopg (the ingest repo) understands host-as-socket.
+  database_url = "postgresql://app:${var.db_password}@/fsd?host=/cloudsql/${google_sql_database_instance.pg.connection_name}"
+}
+
 resource "google_sql_database_instance" "pg" {
   name             = "fsd-pg"
   database_version = "POSTGRES_16"
@@ -78,6 +85,13 @@ resource "google_service_account_iam_member" "ingest_self_signer" {
   member             = "serviceAccount:${google_service_account.ingest.email}"
 }
 
+# The ingest SA needs cloudsql.client to open the Cloud SQL connection from Cloud Run.
+resource "google_project_iam_member" "ingest_sql_client" {
+  project = var.project
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.ingest.email}"
+}
+
 resource "google_cloud_run_v2_service" "ingest" {
   name     = "fsd-ingest"
   location = var.region
@@ -87,7 +101,7 @@ resource "google_cloud_run_v2_service" "ingest" {
       image = var.ingest_image
       env {
         name  = "DATABASE_URL"
-        value = var.database_url
+        value = local.database_url
       }
       env {
         name  = "GCS_BUCKET"
@@ -105,7 +119,21 @@ resource "google_cloud_run_v2_service" "ingest" {
   }
 }
 
+# Public invocation: the phone (and the smoke tests) reach the ingest API directly; the app enforces
+# Firebase auth on /v1 and /healthz is public. Gated so it can be turned off where org policy forbids
+# allUsers bindings (domain-restricted sharing).
+resource "google_cloud_run_v2_service_iam_member" "ingest_public" {
+  count    = var.allow_unauthenticated ? 1 : 0
+  name     = google_cloud_run_v2_service.ingest.name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# A's nightly aggregation. Gated on enable_aggregate so C can deploy the ingest service without A's
+# image existing yet. Turn on once A's aggregate image is published to Artifact Registry.
 resource "google_cloud_run_v2_job" "aggregate" {
+  count    = var.enable_aggregate ? 1 : 0
   name     = "fsd-aggregate"
   location = var.region
   template {
@@ -116,6 +144,7 @@ resource "google_cloud_run_v2_job" "aggregate" {
 }
 
 resource "google_cloud_scheduler_job" "nightly" {
+  count    = var.enable_aggregate ? 1 : 0
   name     = "fsd-aggregate-nightly"
   schedule = "0 3 * * *"
   http_target {

@@ -27,7 +27,6 @@ module "stack" {
   project         = var.project
   region          = var.region
   db_password     = var.db_password
-  database_url    = var.database_url
   ingest_image    = var.ingest_image
   aggregate_image = var.aggregate_image
   runner_sa       = var.runner_sa
@@ -37,4 +36,5 @@ module "stack" {
   db_tier                    = "db-custom-1-3840"
   db_availability_type       = "ZONAL"
   uploads_lifecycle_age_days = 60
+  enable_aggregate           = false
 }

@@ -17,15 +17,20 @@ variable "db_password" {
   sensitive = true
 }
 
-variable "database_url" {
-  type      = string
-  sensitive = true
-}
-
 # --- image tags + the aggregate runner SA (A's job image; C only wires it) ---
 variable "ingest_image" { type = string }
-variable "aggregate_image" { type = string }
-variable "runner_sa" { type = string }
+
+variable "aggregate_image" {
+  type        = string
+  default     = "" # A's nightly-job image; only required when enable_aggregate = true
+  description = "Person A's aggregate job image. Optional until the aggregate job is enabled."
+}
+
+variable "runner_sa" {
+  type        = string
+  default     = "" # only used by the scheduler when enable_aggregate = true
+  description = "Service account the scheduler runs the aggregate job as. Optional until enabled."
+}
 
 # --- env-varying behaviour: dev/staging are disposable, prod is protected + HA ---
 variable "deletion_protection" {
@@ -50,4 +55,16 @@ variable "uploads_lifecycle_age_days" {
   type        = number
   default     = 30
   description = "Delete phone-uploaded blobs after this many days."
+}
+
+variable "enable_aggregate" {
+  type        = bool
+  default     = false
+  description = "Create A's nightly aggregate job + scheduler. Off until A's image exists, so C can deploy the ingest service without it."
+}
+
+variable "allow_unauthenticated" {
+  type        = bool
+  default     = true
+  description = "Make the ingest service publicly invocable (allUsers → run.invoker). The app enforces Firebase auth at /v1; /healthz is public. Set false if org policy forbids allUsers."
 }

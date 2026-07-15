@@ -9,11 +9,14 @@ variable "db_password" {
   sensitive = true # from Secret Manager / TF_VAR_db_password, never committed
 }
 
-variable "database_url" {
-  type      = string
-  sensitive = true
-}
-
 variable "ingest_image" { type = string }
-variable "aggregate_image" { type = string } # built by Person A's job image; C wires it into infra
-variable "runner_sa" { type = string }
+
+# Optional until the nightly aggregate is enabled (A's image). Left empty for ingest-only deploys.
+variable "aggregate_image" {
+  type    = string
+  default = ""
+}
+variable "runner_sa" {
+  type    = string
+  default = ""
+}

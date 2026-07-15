@@ -27,7 +27,6 @@ module "stack" {
   project         = var.project
   region          = var.region
   db_password     = var.db_password
-  database_url    = var.database_url
   ingest_image    = var.ingest_image
   aggregate_image = var.aggregate_image
   runner_sa       = var.runner_sa
@@ -37,4 +36,6 @@ module "stack" {
   db_tier                    = "db-custom-2-7680" # 2 vCPU / 7.5GB
   db_availability_type       = "REGIONAL"         # HA: automatic failover to a standby zone
   uploads_lifecycle_age_days = 90
+  # Flip to true (and set aggregate_image + runner_sa) once A's nightly image is published.
+  enable_aggregate = false
 }
