@@ -124,8 +124,13 @@ resource "google_compute_instance" "valhalla" {
     EOT
   }
 
-  # The tile cache is the whole reason this is a VM; don't let a config tweak silently rebuild it.
   lifecycle {
-    ignore_changes = [metadata["startup-script"]]
+    ignore_changes = [
+      # The tile cache is the whole reason this is a VM; don't let a config tweak silently rebuild it.
+      metadata["startup-script"],
+      # Same as Cloud SQL: park.sh and the budget guard stop this VM out-of-band, and an apply would
+      # otherwise read TERMINATED as drift and restart it behind your back.
+      desired_status,
+    ]
   }
 }

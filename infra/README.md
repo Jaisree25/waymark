@@ -84,18 +84,30 @@ Two resources are ~95% of any bill: **Cloud SQL** and the **Valhalla VM**. Both 
 you drive or not; everything else (Cloud Run, GCS, Artifact Registry, Scheduler) is cents at M1
 volume. So cost control is really just "are those two running?"
 
-### Park them between drives
+### Park them between drives — [`park.sh`](./park.sh)
 
-The single biggest lever. Data survives; you pay only for disks (~$7/mo instead of ~$90):
+The single biggest lever. Data and the built tile cache survive; you pay only for disks:
 
 ```bash
-gcloud sql instances patch fsd-pg --activation-policy NEVER    # stop the DB
-gcloud compute instances stop fsd-valhalla --zone us-west1-a   # stop Valhalla
-
-# ...and back:
-gcloud sql instances patch fsd-pg --activation-policy ALWAYS
-gcloud compute instances start fsd-valhalla --zone us-west1-a
+./park.sh status      # what's running right now
+./park.sh park        # ~$90/mo -> ~$7/mo
+./park.sh unpark      # ...and back, waiting until the DB really accepts connections
 ```
+
+It finds the instances from `terraform output` rather than hardcoding names, is idempotent, and
+skips Valhalla when `enable_valhalla` is false.
+
+Two things to know:
+
+- **While parked the API answers `/healthz` but writes fail** (no database). B's uploader retries
+  with backoff so queued data isn't lost — but don't park mid-drive.
+- **Unpark before you set off, not as you get in the car.** Cloud SQL takes ~1–2 minutes to accept
+  connections; `unpark` waits for it.
+
+> `terraform apply` won't fight this. `activation_policy` and `desired_status` are both
+> optional-but-not-computed, so an apply would otherwise read a stopped resource as drift and
+> restart it — you'd believe you were parked and keep paying. Both sit under `ignore_changes`, which
+> makes park.sh the owner of "is it running".
 
 ### The budget guard (set `billing_account` to enable)
 

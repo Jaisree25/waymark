@@ -14,3 +14,20 @@ output "ingest_url" {
   description = "Deployed ingest service URL (for deploy smoke tests)."
   value       = module.stack.ingest_url
 }
+
+# --- what park.sh needs to find the billable resources ---
+
+output "sql_connection_name" {
+  description = "Cloud SQL connection name (project:region:instance)."
+  value       = module.stack.sql_connection_name
+}
+
+output "valhalla_instance" {
+  description = "Valhalla VM name; empty when enable_valhalla is false."
+  value       = module.stack.valhalla_instance
+}
+
+output "valhalla_zone" {
+  description = "Valhalla VM zone; empty when enable_valhalla is false."
+  value       = module.stack.valhalla_zone
+}

@@ -35,3 +35,8 @@ output "valhalla_instance" {
   description = "Valhalla VM name, for `gcloud compute ssh` when tiles need inspecting. Empty when disabled."
   value       = var.enable_valhalla ? google_compute_instance.valhalla[0].name : ""
 }
+
+output "valhalla_zone" {
+  description = "Zone the Valhalla VM runs in. Empty when disabled. park.sh needs it to stop/start."
+  value       = var.enable_valhalla ? local.valhalla_zone : ""
+}

@@ -19,6 +19,14 @@ resource "google_sql_database_instance" "pg" {
     ip_configuration { ipv4_enabled = true }
   }
   deletion_protection = var.deletion_protection
+
+  # Parking (infra/park.sh, and the budget guard) stops this instance out-of-band by setting
+  # activationPolicy = NEVER. That field is optional-but-not-computed, so an apply would otherwise
+  # see the stopped instance as drift and quietly restart it — you'd believe you were parked and
+  # keep paying. Ownership of "is it running" belongs to park.sh, not to this config.
+  lifecycle {
+    ignore_changes = [settings[0].activation_policy]
+  }
 }
 
 resource "google_sql_database" "fsd" {
