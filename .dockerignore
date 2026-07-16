@@ -1,0 +1,18 @@
+# The ingest image builds from the REPO ROOT, because it needs two lanes' files: C's
+# backend/ingest/app and A's db/exports.py. A root context is dangerous by default — this repo holds
+# multi-GB Valhalla tiles and OSM extracts (backend/mapmatch/data), plus .git and venvs, none of
+# which must ever be shipped to the daemon.
+#
+# So: exclude everything, then re-include exactly what the image needs. Deny-by-default means a new
+# large directory can't silently bloat the build.
+*
+
+!backend/ingest/requirements.txt
+!backend/ingest/app/
+!db/exports.py
+
+# ...and never let build artefacts ride along inside the re-included paths (these rules come last,
+# so they win over the re-includes above).
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/

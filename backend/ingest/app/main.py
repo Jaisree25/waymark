@@ -155,15 +155,32 @@ def create_app(state: AppState) -> FastAPI:
     return app
 
 
+def _load_exports(database_url: str):
+    """Person A's export queries — shipped beside the app by the Dockerfile (db/exports.py).
+
+    Optional by design: A owns this module and it lives outside C's package, so running the ingest
+    API from a checkout without db/ on sys.path is a normal dev case. The inspect/export routes
+    already answer a clean 503 when it's absent, which is also the right behaviour for an
+    ingest-only deploy.
+    """
+    try:
+        from exports import SqlExports  # noqa: PLC0415 — A's module, not part of C's package
+    except ImportError:
+        return None
+    return SqlExports(database_url)
+
+
 def build_production_app() -> FastAPI:
     """Wires the real ports from env. Imported by uvicorn in the container."""
     from .auth import FirebaseAuth
     from .repository import SqlRepository
     from .storage import GcsStorage
 
+    database_url = os.environ["DATABASE_URL"]
     state = AppState(
         storage=GcsStorage(bucket_name=os.environ["GCS_BUCKET"]),
         auth=FirebaseAuth(project_id=os.environ["FIREBASE_PROJECT_ID"]),
-        repo=SqlRepository(database_url=os.environ["DATABASE_URL"]),
+        repo=SqlRepository(database_url=database_url),
+        exports=_load_exports(database_url),
     )
     return create_app(state)

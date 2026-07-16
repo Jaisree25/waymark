@@ -68,7 +68,8 @@ info "env=$ENV  project=$PROJECT  image=$IMG"
 
 # ---------- build + push ----------
 info "building image ..."
-docker build -t "$IMG" "$INGEST_DIR" || die "docker build failed"
+# Context is the repo root: the image needs backend/ingest/app AND db/exports.py (A's queries).
+docker build -f "$INGEST_DIR/Dockerfile" -t "$IMG" "$REPO_ROOT" || die "docker build failed"
 info "configuring docker auth + pushing ..."
 gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet >/dev/null 2>&1 || die "configure-docker failed"
 docker push "$IMG" || die "docker push failed (is the 'fsd' Artifact Registry repo created? run gc_setup)"
