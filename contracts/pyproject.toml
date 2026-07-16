@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+# The shared contract tests span every lane by design, so all three trees join the path:
+#   ../backend/ingest   C's app          ../db   A's schema + attribution
+#   ../backend/mapmatch C's matcher      ..      the frozen contracts themselves
+# They import each owner's real module — never a copy — so drift fails here.
+testpaths = ["tests"]
+pythonpath = [".", "..", "../backend/ingest", "../backend/mapmatch", "../db"]
