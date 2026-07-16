@@ -7,11 +7,14 @@ tests fake GCS + Firebase and never touch the network.
 
 from __future__ import annotations
 
+import csv
+import io
 import os
+from collections.abc import Iterator
 
 import psycopg
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from .auth import bearer_from_header
 from .deps import AppState
@@ -36,6 +39,49 @@ def require_idempotency_key(idempotency_key: str | None = Header(default=None, a
     if not idempotency_key:
         raise HTTPException(status_code=400, detail="Idempotency-Key header required")
     return idempotency_key
+
+
+# The datasets 05-feasibility-testing.md consumes. An allowlist, so the path param can never be
+# steered at something A's exports didn't mean to publish.
+CSV_DATASETS = ("events", "trips", "segment_exposure", "scores")
+
+
+def _exports(request: Request):
+    """A's export queries, or a clean 503 on deploys that don't wire them (ingest-only)."""
+    exports = _state(request).exports
+    if exports is None:
+        raise HTTPException(status_code=503, detail="export queries not configured")
+    return exports
+
+
+def _feature_collection(rows: list[dict]) -> dict:
+    """Rows → GeoJSON. `geometry` is lifted into the Feature; every other key is a property."""
+    features = []
+    for row in rows:
+        properties = dict(row)
+        geometry = properties.pop("geometry", None)
+        features.append({"type": "Feature", "geometry": geometry, "properties": properties})
+    return {"type": "FeatureCollection", "features": features}
+
+
+def _csv_stream(rows: list[dict]) -> Iterator[str]:
+    """Stream rows as CSV so a large export never buffers the whole table in memory."""
+    if not rows:
+        return
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
+
+    def flush() -> str:
+        chunk = buf.getvalue()
+        buf.seek(0)
+        buf.truncate(0)
+        return chunk
+
+    writer.writeheader()
+    yield flush()
+    for row in rows:
+        writer.writerow(row)
+        yield flush()
 
 
 def create_app(state: AppState) -> FastAPI:
@@ -80,6 +126,31 @@ def create_app(state: AppState) -> FastAPI:
     ) -> OkResponse:
         _state(request).repo.upsert_breadcrumb(breadcrumb, idempotency_key)
         return OkResponse()
+
+    # --- read-only inspection + export (04-inspection-ui.md). C wraps A's queries; A owns the SQL.
+    # Unauthenticated by design: M1's inspector is an internal data-quality tool, not a product.
+
+    @app.get("/v1/inspect/segments.geojson")
+    async def segments_geojson(request: Request) -> dict:
+        # road_segments ⨝ latest scores; the UI colors by severity_per_mile, grays out `gated`.
+        return _feature_collection(_exports(request).segment_rows())
+
+    @app.get("/v1/inspect/events.geojson")
+    async def events_geojson(request: Request) -> dict:
+        # Snapped point as geometry + raw_lat/raw_lon as properties: the inspector draws the
+        # raw→snapped line between them, and that line IS the risk #2 attribution check.
+        return _feature_collection(_exports(request).event_rows())
+
+    @app.get("/v1/export/{dataset}.csv")
+    async def export_csv(dataset: str, request: Request) -> StreamingResponse:
+        if dataset not in CSV_DATASETS:
+            raise HTTPException(status_code=404, detail=f"unknown dataset: {dataset}")
+        rows = _exports(request).csv_rows(dataset)
+        return StreamingResponse(
+            _csv_stream(rows),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{dataset}.csv"'},
+        )
 
     return app
 

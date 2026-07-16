@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .ports import AuthPort, StoragePort
+from .ports import AuthPort, ExportsPort, StoragePort
 from .repository import Repository
 
 
@@ -17,3 +17,6 @@ class AppState:
     storage: StoragePort
     auth: AuthPort
     repo: Repository
+    # A's export queries, behind a port. Optional: the ingest endpoints don't need it, so tests that
+    # only exercise writes construct AppState without it. The inspect/export routes 503 when unset.
+    exports: ExportsPort | None = None

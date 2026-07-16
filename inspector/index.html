@@ -62,7 +62,8 @@
     const links = {
       type: "FeatureCollection",
       features: (ev.features || [])
-        .filter((f) => f.properties && f.properties.raw_lon != null)
+        // Skip events with no snapped geometry (not map-matched yet) — nothing to draw a line to.
+        .filter((f) => f.geometry && f.properties && f.properties.raw_lon != null)
         .map((f) => ({
           type: "Feature",
           geometry: { type: "LineString",
