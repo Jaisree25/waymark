@@ -1,0 +1,66 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!--
+  Tiny OSM fixture for the road_segments loader.
+
+  Committed as .osm XML rather than .osm.pbf on purpose: osmium reads both, and text is reviewable
+  and diffable in a way a binary blob isn't. The loader treats them identically, so this exercises
+  the real parse path.
+
+  Contents, chosen to cover each decision the loader makes:
+    way 100  highway=secondary   in the SF bbox      -> loaded
+    way 101  highway=residential in the SF bbox      -> loaded
+    way 102  highway=motorway    in Sacramento bbox  -> loaded (a second region)
+    way 900  highway=motorway    far outside every bbox (Nevada) -> skipped: out of region
+    way 901  building=yes        in the SF bbox      -> skipped: not a road
+-->
+<osm version="0.6" generator="fsd-benchmark-fixture">
+  <!-- SF: Market St, ~0.06 mi -->
+  <node id="1" version="1" lat="37.7793" lon="-122.4193"/>
+  <node id="2" version="1" lat="37.7799" lon="-122.4183"/>
+
+  <!-- SF: a residential street -->
+  <node id="3" version="1" lat="37.7750" lon="-122.4180"/>
+  <node id="4" version="1" lat="37.7752" lon="-122.4170"/>
+
+  <!-- Sacramento: proves the region list is a LIST, not just one box -->
+  <node id="5" version="1" lat="38.5800" lon="-121.4900"/>
+  <node id="6" version="1" lat="38.5810" lon="-121.4890"/>
+
+  <!-- Nevada: outside every configured region -->
+  <node id="7" version="1" lat="39.5000" lon="-119.8000"/>
+  <node id="8" version="1" lat="39.5010" lon="-119.7990"/>
+
+  <!-- SF: a building, not a road -->
+  <node id="9" version="1" lat="37.7795" lon="-122.4191"/>
+  <node id="10" version="1" lat="37.7796" lon="-122.4190"/>
+
+  <way id="100" version="1">
+    <nd ref="1"/><nd ref="2"/>
+    <tag k="highway" v="secondary"/>
+    <tag k="name" v="Market St"/>
+  </way>
+
+  <way id="101" version="1">
+    <nd ref="3"/><nd ref="4"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Folsom St"/>
+  </way>
+
+  <way id="102" version="1">
+    <nd ref="5"/><nd ref="6"/>
+    <tag k="highway" v="motorway"/>
+    <tag k="name" v="Capital City Fwy"/>
+  </way>
+
+  <way id="900" version="1">
+    <nd ref="7"/><nd ref="8"/>
+    <tag k="highway" v="motorway"/>
+    <tag k="name" v="Nevada Route"/>
+  </way>
+
+  <way id="901" version="1">
+    <nd ref="9"/><nd ref="10"/>
+    <tag k="building" v="yes"/>
+    <tag k="name" v="Ferry Building"/>
+  </way>
+</osm>

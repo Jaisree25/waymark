@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "Which regions road_segments covers — the loader's input. Config, not code: widening coverage",
+    "is an edit here plus a loader re-run, never a schema, ingest or scoring change (geography is",
+    "data). Source: docs/M1/03-backend-gcp.md §5.",
+    "Boxes are [south_lat, west_lon, north_lat, east_lon]. These are generous starting rectangles,",
+    "not surveyed bounds — verify/tighten before a real load.",
+    "All boxes fall INSIDE the already-built norcal Valhalla tiles, so map-matching needs no rebuild;",
+    "this loader is the only thing that changes when the list does.",
+    "Scope caution: loading a box PROVISIONS coverage, it doesn't populate it. M1's feasibility",
+    "depends on density, which comes from concentrating driving (SF), not scattering thin miles."
+  ],
+  "regions": [
+    { "name": "sf_peninsula", "bbox": [37.40, -122.55, 37.85, -122.35] },
+    { "name": "east_bay",     "bbox": [37.65, -122.35, 37.95, -122.10] },
+    { "name": "south_bay",    "bbox": [37.20, -122.05, 37.50, -121.75] },
+    { "name": "santa_cruz",   "bbox": [36.90, -122.10, 37.05, -121.95] },
+    { "name": "sacramento",   "bbox": [38.45, -121.60, 38.70, -121.35] },
+    { "name": "folsom",       "bbox": [38.60, -121.25, 38.72, -121.05] }
+  ]
+}
