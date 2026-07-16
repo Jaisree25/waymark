@@ -1,0 +1,15 @@
+{
+  "_comment": [
+    "Versioned scoring config for the nightly aggregation. Thresholds live HERE, never as literals",
+    "in aggregate.py — the brief's first design rule. Retuning the gate is a config edit + re-run,",
+    "not a code change or a migration.",
+    "Mirrors the `scoring` block of the app config in docs/M1/02-flutter-app.md; keep the two in",
+    "step so the number the app reports against is the number the backend scores by.",
+    "calibration_version stamps every scores row, so a snapshot always says which tuning produced it."
+  ],
+  "calibration_version": "m1",
+  "scoring": {
+    "min_mileage_gate_miles": 5.0,
+    "severity_scale_max": 5
+  }
+}

@@ -1,0 +1,2 @@
+# Nightly aggregation job (Person A). Caret-style pins — verify newest patch at build time.
+psycopg[binary]>=3.2

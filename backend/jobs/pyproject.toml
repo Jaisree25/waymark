@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+# Run from backend/jobs/ so `import aggregate` and `from .conftest import ...` resolve.
+testpaths = ["tests"]
+pythonpath = ["."]
