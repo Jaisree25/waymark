@@ -1,8 +1,9 @@
 """Cycle 2 — persistence + idempotency against a REAL local PostGIS (do not fake the DB).
 
-Loads the Contract-1 schema mirror (contract_schema.sql) into the test DB, wires the app with the
-real SqlRepository (GCS/Firebase still faked), and proves rows land and retries dedupe. Skips cleanly
-when no PostGIS is reachable:
+Loads A's Contract-1 schema (db/schema.sql — the canonical file, not a copy) into the test DB, wires
+the app with the real SqlRepository (GCS/Firebase still faked), and proves rows land and retries
+dedupe. Reading A's actual schema is the point: if A changes the DDL, C's tests break here rather
+than in production. Skips cleanly when no PostGIS is reachable:
 
     docker run -d --name fsd-pg-test -p 5433:5432 \
       -e POSTGRES_USER=app -e POSTGRES_PASSWORD=app -e POSTGRES_DB=fsd_test postgis/postgis:16-3.4
@@ -37,7 +38,7 @@ pytestmark = pytest.mark.integration
 # 127.0.0.1 not "localhost": on Windows localhost resolves to IPv6 ::1 first and stalls ~5s per
 # connect before falling back to IPv4, and each repo call opens a fresh connection.
 TEST_DB_URL = os.environ.get("TEST_DATABASE_URL", "postgresql://app:app@127.0.0.1:5433/fsd_test")
-SCHEMA_SQL = (Path(__file__).parent / "contract_schema.sql").read_text()
+SCHEMA_SQL = (Path(__file__).parents[3] / "db" / "schema.sql").read_text()  # A's canonical Contract 1
 _DATA_TABLES = "trips, events, breadcrumb_segments, segment_exposure, scores, road_segments"
 
 

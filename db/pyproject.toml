@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+# Run from db/ so `import exports` and `from .conftest import ...` resolve.
+testpaths = ["tests"]
+pythonpath = ["."]
