@@ -17,6 +17,54 @@ locals {
   # The job's VALHALLA_URL. Derived from the instance rather than hand-configured, so it can't drift
   # from the machine actually serving; falls back to the override when Valhalla isn't managed here.
   valhalla_url = var.enable_valhalla ? "http://${google_compute_instance.valhalla[0].network_interface[0].network_ip}:8002" : var.valhalla_url
+
+  # `one(...)` rather than [0]: a splat on a count-0 resource is [] and one([]) is null, whereas
+  # indexing would blow up when Valhalla is disabled.
+  ghcr_mirror_repo = one(google_artifact_registry_repository.ghcr_mirror[*].repository_id)
+
+  # The image the VM actually pulls. It MUST be a *.pkg.dev address, not ghcr.io: the VM has no
+  # external IP, and Private Google Access reaches Google endpoints only. See the mirror below.
+  valhalla_image = (
+    var.valhalla_image != "" ? var.valhalla_image :
+    local.ghcr_mirror_repo != null ?
+    "${var.region}-docker.pkg.dev/${var.project}/${local.ghcr_mirror_repo}/${var.valhalla_upstream_image}" : ""
+  )
+}
+
+# A pull-through cache of ghcr.io.
+#
+# Without this the VM cannot start: its startup script pulls the Valhalla image, but the box has no
+# external IP by design and Private Google Access resolves *Google* endpoints only — ghcr.io is
+# GitHub. The alternatives were worse: a Cloud NAT gateway costs ~$33/month to fetch one image, and
+# an external IP would put an unauthenticated routing engine on the public internet.
+#
+# Artifact Registry does the fetching (it has internet access), the VM pulls from *.pkg.dev, and the
+# upstream tag keeps working without anyone mirroring images by hand.
+resource "google_artifact_registry_repository" "ghcr_mirror" {
+  count         = var.enable_valhalla ? 1 : 0
+  repository_id = "ghcr-remote"
+  location      = var.region
+  format        = "DOCKER"
+  description   = "Pull-through cache of ghcr.io, so the no-external-IP Valhalla VM can pull its image"
+  mode          = "REMOTE_REPOSITORY"
+
+  remote_repository_config {
+    description = "ghcr.io"
+    docker_repository {
+      custom_repository {
+        uri = "https://ghcr.io"
+      }
+    }
+  }
+}
+
+# The VM pulls from the mirror, so it needs read on Artifact Registry.
+resource "google_artifact_registry_repository_iam_member" "valhalla_puller" {
+  count      = var.enable_valhalla ? 1 : 0
+  location   = google_artifact_registry_repository.ghcr_mirror[0].location
+  repository = google_artifact_registry_repository.ghcr_mirror[0].name
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.valhalla[0].email}"
 }
 
 # An explicit VPC rather than the auto-created "default" network: default is click-ops we didn't
@@ -109,7 +157,12 @@ resource "google_compute_instance" "valhalla" {
       DATA=/var/valhalla
       mkdir -p "$DATA"
 
+      # COS ships docker-credential-gcr but doesn't wire it to Artifact Registry, so an unconfigured
+      # box gets 401 pulling from *.pkg.dev. The VM's service account supplies the token.
+      docker-credential-gcr configure-docker --registries=${var.region}-docker.pkg.dev
+
       if [ ! -f "$DATA/.tiles-fetched" ]; then
+        # gcr.io is a Google endpoint, so Private Google Access reaches it without an external IP.
         docker run --rm -v "$DATA":/data \
           gcr.io/google.com/cloudsdktool/google-cloud-cli:slim \
           gsutil -m cp -r "gs://${google_storage_bucket.osm.name}/*" /data/ || true
@@ -120,7 +173,7 @@ resource "google_compute_instance" "valhalla" {
       # host maintenance event without anyone noticing at 03:00.
       docker run -d --name valhalla --restart always \
         -p 8002:8002 -v "$DATA":/custom_files \
-        ${var.valhalla_image}
+        ${local.valhalla_image}
     EOT
   }
 

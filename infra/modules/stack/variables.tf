@@ -119,10 +119,16 @@ variable "valhalla_disk_gb" {
   description = "Boot disk size. Must hold the OSM extract plus the built tiles."
 }
 
+variable "valhalla_upstream_image" {
+  type        = string
+  default     = "gis-ops/docker-valhalla/valhalla:latest"
+  description = "The Valhalla image's path WITHIN ghcr.io (OSS). Pulled through the Artifact Registry mirror, because the VM has no external IP and can't reach ghcr.io directly. Pin a digest before anything you rely on."
+}
+
 variable "valhalla_image" {
   type        = string
-  default     = "ghcr.io/gis-ops/docker-valhalla/valhalla:latest"
-  description = "Valhalla container image (OSS). Pin a digest before anything you rely on."
+  default     = ""
+  description = "Full image override for the Valhalla VM. Leave empty to use the ghcr.io mirror. If you set this, it must be an address the VM can actually reach with no external IP — i.e. *.pkg.dev or gcr.io, never ghcr.io/docker.io."
 }
 
 variable "valhalla_zone" {
