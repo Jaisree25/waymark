@@ -1,4 +1,6 @@
 [tool.pytest.ini_options]
-# Run from backend/jobs/ so `import aggregate` and `from .conftest import ...` resolve.
+# Run from backend/jobs/. The pipeline composes modules from two lanes plus the frozen contract, so
+# db/ (A's exposure) and the repo root (contracts/) join the path — mirroring how the Dockerfile
+# lays them out flat beside each other in the image.
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "../../db", "../.."]

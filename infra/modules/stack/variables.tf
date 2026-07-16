@@ -60,7 +60,13 @@ variable "uploads_lifecycle_age_days" {
 variable "enable_aggregate" {
   type        = bool
   default     = false
-  description = "Create A's nightly aggregate job + scheduler. Off until A's image exists, so C can deploy the ingest service without it."
+  description = "Create A's nightly aggregate job + scheduler. Off until A's image exists and Valhalla is deployed, so C can deploy the ingest service without either."
+}
+
+variable "valhalla_url" {
+  type        = string
+  default     = ""
+  description = "Base URL of the Valhalla map-matching service the nightly job calls (steps 1-2). Required once enable_aggregate is true; Valhalla itself is not yet deployed by this module."
 }
 
 variable "allow_unauthenticated" {

@@ -1,4 +1,4 @@
-# backend/jobs — the nightly scoring aggregation (Person A)
+# backend/jobs — the nightly pipeline (Person A)
 
 ## The problem it solves
 
@@ -18,10 +18,11 @@ hand is the only kind you can trust that judgement on. This is feasibility **ris
 
 | File | What it is |
 |---|---|
-| [`aggregate.py`](./aggregate.py) | The job: one SQL aggregation → a `scores` snapshot. |
+| [`nightly.py`](./nightly.py) | **The entrypoint**: attribute → build exposure → aggregate. |
+| [`aggregate.py`](./aggregate.py) | Step 3 alone: one SQL aggregation → a `scores` snapshot. |
 | [`config/scoring.json`](./config/scoring.json) | The versioned gate + calibration version. |
 | [`Dockerfile`](./Dockerfile) | The Cloud Run Job image (C wires it in as `aggregate_image`). |
-| [`tests/`](./tests/) | 19 tests on a **real** PostGIS. |
+| [`tests/`](./tests/) | 30 tests on a **real** PostGIS, with a fake matcher. |
 
 ## Intent / design rules
 
@@ -37,9 +38,19 @@ hand is the only kind you can trust that judgement on. This is feasibility **ris
 - **One run, one `as_of`.** The stamp is read once (`clock_timestamp()`) and passed as a parameter,
   so a snapshot can't tear across ways. It's `clock_timestamp()` and not `now()` because `now()` is
   the *transaction* timestamp — two runs in one transaction would collide on the `scores` PK.
-- **Aggregates what's already in the tables.** Filling `events.way_id` and `segment_exposure` is
-  map-matching's job, upstream of this. If it hasn't run, ways have no exposure and gate out —
-  the honest result rather than a silent zero.
+- **Three steps, in order.** `nightly.py` attributes events → builds exposure → aggregates. Step 3
+  alone is meaningless: with no exposure every way has a zero denominator, gates out, and scores
+  NULL. `test_aggregation_alone_would_have_gated_everything` pins exactly that.
+- **Map-matching happens here, not at ingest**, so a slow or down Valhalla can never reject an
+  upload. The phone's data lands immediately as raw; attribution catches up overnight.
+- **The pipeline depends on the interface, not Valhalla.** `run_nightly` takes a Contract 3
+  `MapMatcher`; only `main()` knows `ValhallaMatcher` exists. So the whole chain is tested with a
+  fake and no Valhalla running.
+- **Re-running is safe, and re-running matters.** Every step is idempotent, and exposure is rebuilt
+  for *all* trips each night rather than only new ones — uploads are resumable, so a trip's
+  breadcrumbs can arrive across several nights, and skipping trips that already had rows would
+  freeze them at partial mileage and permanently overstate their risk. That costs O(all trips) in
+  Valhalla calls: the first thing to make incremental as data grows.
 
 ## Test / run steps
 

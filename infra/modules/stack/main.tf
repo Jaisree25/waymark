@@ -130,15 +130,34 @@ resource "google_cloud_run_v2_service_iam_member" "ingest_public" {
   member   = "allUsers"
 }
 
-# A's nightly aggregation. Gated on enable_aggregate so C can deploy the ingest service without A's
-# image existing yet. Turn on once A's aggregate image is published to Artifact Registry.
+# A's nightly pipeline: attribute events → build exposure → score. Gated on enable_aggregate so C can
+# deploy the ingest service without A's image existing yet. Turn on once the image is published.
 resource "google_cloud_run_v2_job" "aggregate" {
   count    = var.enable_aggregate ? 1 : 0
   name     = "fsd-aggregate"
   location = var.region
   template {
     template {
-      containers { image = var.aggregate_image }
+      # Runs as the ingest SA: it already holds cloudsql.client, and the job needs the same database.
+      # A dedicated identity would be tighter — worth splitting if the job ever gains other rights.
+      service_account = google_service_account.ingest.email
+      containers {
+        image = var.aggregate_image
+        env {
+          name  = "DATABASE_URL"
+          value = local.database_url
+        }
+        # The job map-matches (steps 1-2), so it needs Valhalla. Empty until Valhalla is deployed —
+        # which is why enable_aggregate stays false: the pipeline can't attribute without it.
+        env {
+          name  = "VALHALLA_URL"
+          value = var.valhalla_url
+        }
+      }
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance { instances = [google_sql_database_instance.pg.connection_name] }
+      }
     }
   }
 }

@@ -1,2 +1,3 @@
 # Nightly aggregation job (Person A). Caret-style pins — verify newest patch at build time.
 psycopg[binary]>=3.2
+httpx>=0.27          # used by C's ValhallaMatcher, which the pipeline calls through Contract 3
