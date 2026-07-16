@@ -25,3 +25,13 @@ output "sql_connection_name" {
   description = "Cloud SQL connection name for the Cloud SQL Auth proxy / Cloud Run volume."
   value       = google_sql_database_instance.pg.connection_name
 }
+
+output "valhalla_url" {
+  description = "Where the nightly job reaches Valhalla. VPC-internal only — not callable from your laptop."
+  value       = local.valhalla_url
+}
+
+output "valhalla_instance" {
+  description = "Valhalla VM name, for `gcloud compute ssh` when tiles need inspecting. Empty when disabled."
+  value       = var.enable_valhalla ? google_compute_instance.valhalla[0].name : ""
+}

@@ -63,10 +63,47 @@ variable "enable_aggregate" {
   description = "Create A's nightly aggregate job + scheduler. Off until A's image exists and Valhalla is deployed, so C can deploy the ingest service without either."
 }
 
+# --- Valhalla (map-matching) ---
+variable "enable_valhalla" {
+  type        = bool
+  default     = false
+  description = "Deploy the Valhalla VM + its VPC. Off by default: a VM bills continuously whether the nightly runs or not. Turn on for Checkpoint 2, when the pipeline needs a real matcher."
+}
+
 variable "valhalla_url" {
   type        = string
   default     = ""
-  description = "Base URL of the Valhalla map-matching service the nightly job calls (steps 1-2). Required once enable_aggregate is true; Valhalla itself is not yet deployed by this module."
+  description = "Override for the nightly job's VALHALLA_URL. Ignored when enable_valhalla is true — the URL is then derived from the managed instance so it can't drift."
+}
+
+variable "valhalla_machine_type" {
+  type        = string
+  default     = "e2-standard-2" # 2 vCPU / 8GB — the size docs/M1/03-backend-gcp.md §5 suggests
+  description = "Valhalla VM size. M1's SF/norcal tile set is small; scale up only if matching is slow."
+}
+
+variable "valhalla_disk_gb" {
+  type        = number
+  default     = 50
+  description = "Boot disk size. Must hold the OSM extract plus the built tiles."
+}
+
+variable "valhalla_image" {
+  type        = string
+  default     = "ghcr.io/gis-ops/docker-valhalla/valhalla:latest"
+  description = "Valhalla container image (OSS). Pin a digest before anything you rely on."
+}
+
+variable "valhalla_zone" {
+  type        = string
+  default     = ""
+  description = "Zone for the Valhalla VM. Defaults to <region>-a."
+}
+
+variable "valhalla_subnet_cidr" {
+  type        = string
+  default     = "10.10.0.0/24"
+  description = "Subnet the Valhalla VM and the nightly job's VPC egress share."
 }
 
 variable "allow_unauthenticated" {

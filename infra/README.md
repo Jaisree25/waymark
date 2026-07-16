@@ -22,8 +22,22 @@ the shared [`modules/stack`](./modules/stack/main.tf) module and instantiated pe
 | **GCS `${project}-uploads`** | `google_storage_bucket.uploads` | Phone-uploaded event blobs via signed PUT URLs; short lifecycle. |
 | **Ingest service account** | `google_service_account.ingest` (+ IAM) | Runtime identity; objectAdmin on uploads; self-`tokenCreator` for keyless V4 signing. |
 | **Cloud Run service `fsd-ingest`** | `google_cloud_run_v2_service.ingest` | Hosts the FastAPI ingest container (runs as the ingest SA). |
-| **Cloud Run job `fsd-aggregate`** | `google_cloud_run_v2_job.aggregate` | Nightly `severity ÷ miles` scoring (Person A's image). |
-| **Cloud Scheduler** | `google_cloud_scheduler_job.nightly` | Triggers the aggregate job at 03:00. |
+| **Cloud Run job `fsd-aggregate`** | `google_cloud_run_v2_job.aggregate` | Nightly pipeline: attribute → exposure → score (Person A's image). |
+| **Cloud Scheduler** | `google_cloud_scheduler_job.nightly` | Triggers the nightly job at 03:00. |
+| **Valhalla VM + VPC** | [`valhalla.tf`](./modules/stack/valhalla.tf) | OSM map-matching for the nightly. GCE (warm tile cache), **no external IP**; the job reaches it over Direct VPC egress. |
+
+### Two things are off by default
+
+Both cost money continuously and neither is needed until Checkpoint 2, so they're gated:
+
+| Flag | Default | Turn on when |
+|---|---|---|
+| `enable_valhalla` | `false` | You need real map-matching. Creates a VM that bills whether the nightly runs or not. |
+| `enable_aggregate` | `false` | A's job image is published **and** a matcher exists. |
+
+They're coupled: the nightly map-matches before it scores, so `enable_aggregate` without a matcher is
+a misconfiguration that would run at 03:00, gate every road, and look like a data problem. A
+`precondition` on the job rejects it at **plan** time instead.
 
 ### Layout — one module, three environments
 

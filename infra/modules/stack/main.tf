@@ -136,6 +136,17 @@ resource "google_cloud_run_v2_job" "aggregate" {
   count    = var.enable_aggregate ? 1 : 0
   name     = "fsd-aggregate"
   location = var.region
+
+  # The pipeline map-matches before it scores, so a job without Valhalla can't attribute anything —
+  # it would run at 03:00, gate every road, and look like a data problem rather than a config one.
+  # Fail at plan time instead.
+  lifecycle {
+    precondition {
+      condition     = local.valhalla_url != ""
+      error_message = "enable_aggregate needs a map-matcher: set enable_valhalla = true, or point valhalla_url at an existing Valhalla."
+    }
+  }
+
   template {
     template {
       # Runs as the ingest SA: it already holds cloudsql.client, and the job needs the same database.
@@ -147,16 +158,30 @@ resource "google_cloud_run_v2_job" "aggregate" {
           name  = "DATABASE_URL"
           value = local.database_url
         }
-        # The job map-matches (steps 1-2), so it needs Valhalla. Empty until Valhalla is deployed —
-        # which is why enable_aggregate stays false: the pipeline can't attribute without it.
+        # The job map-matches (steps 1-2), so it needs Valhalla. Derived from the managed VM when
+        # enable_valhalla is on; see local.valhalla_url in valhalla.tf.
         env {
           name  = "VALHALLA_URL"
-          value = var.valhalla_url
+          value = local.valhalla_url
         }
       }
       volumes {
         name = "cloudsql"
         cloud_sql_instance { instances = [google_sql_database_instance.pg.connection_name] }
+      }
+
+      # Valhalla has no external IP, so the job needs a foot inside the VPC to call it. Direct VPC
+      # egress rather than a Serverless VPC Access connector: no connector VMs to pay for or size.
+      # PRIVATE_RANGES_ONLY keeps the job's other traffic (Cloud SQL, GCS) on the normal path.
+      dynamic "vpc_access" {
+        for_each = var.enable_valhalla ? [1] : []
+        content {
+          egress = "PRIVATE_RANGES_ONLY"
+          network_interfaces {
+            network    = google_compute_network.fsd[0].id
+            subnetwork = google_compute_subnetwork.fsd[0].id
+          }
+        }
       }
     }
   }
