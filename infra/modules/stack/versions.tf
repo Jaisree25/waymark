@@ -7,5 +7,11 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 5.0"
     }
+    # Zips the budget-guard function source at plan time, so the function's code is versioned with
+    # the infra that deploys it rather than uploaded by hand.
+    archive = {
+      source  = "hashicorp/archive"
+      version = ">= 2.4"
+    }
   }
 }

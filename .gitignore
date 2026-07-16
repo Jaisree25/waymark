@@ -11,6 +11,8 @@ __pycache__/
 terraform.tfvars
 *.auto.tfvars
 .db_password
+# function source zips, built by archive_file at plan time
+.build/
 
 # Secrets / creds
 *.env

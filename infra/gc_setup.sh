@@ -104,6 +104,10 @@ APIS=(
   iam.googleapis.com
   iamcredentials.googleapis.com   # SignBlob API — powers keyless signed URLs
   compute.googleapis.com
+  pubsub.googleapis.com           # budget alerts -> the shutoff guard
+  cloudfunctions.googleapis.com   # the guard itself
+  eventarc.googleapis.com         # delivers Pub/Sub to the gen2 function
+  billingbudgets.googleapis.com   # the budget resource
 )
 info "enabling ${#APIS[@]} APIs (idempotent; may take a minute) ..."
 gcloud services enable "${APIS[@]}" >/dev/null || die "enabling APIs failed"

@@ -1,0 +1,2 @@
+functions-framework>=3.8
+google-api-python-client>=2.140

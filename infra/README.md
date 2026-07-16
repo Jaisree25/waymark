@@ -78,6 +78,45 @@ resource names don't collide and blast radius is contained. `variables.tf` +
   once, then uncomment it so state is shared, not local.
 - **Dev is disposable.** `deletion_protection = false` on the dev DB — do **not** carry that to prod.
 
+## Cost control
+
+Two resources are ~95% of any bill: **Cloud SQL** and the **Valhalla VM**. Both bill 24/7 whether
+you drive or not; everything else (Cloud Run, GCS, Artifact Registry, Scheduler) is cents at M1
+volume. So cost control is really just "are those two running?"
+
+### Park them between drives
+
+The single biggest lever. Data survives; you pay only for disks (~$7/mo instead of ~$90):
+
+```bash
+gcloud sql instances patch fsd-pg --activation-policy NEVER    # stop the DB
+gcloud compute instances stop fsd-valhalla --zone us-west1-a   # stop Valhalla
+
+# ...and back:
+gcloud sql instances patch fsd-pg --activation-policy ALWAYS
+gcloud compute instances start fsd-valhalla --zone us-west1-a
+```
+
+### The budget guard (set `billing_account` to enable)
+
+A Cloud Billing budget → Pub/Sub → a function that **stops those same two resources** when spend
+crosses `budget_shutoff_threshold`. Set `billing_account`; leave it empty and none of it is created.
+
+```hcl
+billing_account   = "0X0X0X-0X0X0X-0X0X0X"
+budget_amount_usd = 50     # alerts at 50% / 90%, stops at 100%
+```
+
+**It stops resources; it does not disable billing.** That's deliberate: Google stops Cloud SQL
+instances whose project loses billing and eventually *deletes* them. Real drive data costs a weekend
+in a car and can't be regenerated — a surprise invoice is the cheaper mistake.
+
+> **If the guard fires, your stack is stopped, not broken.** Raise `budget_amount_usd` (or fix
+> whatever was burning money), then run the unpark commands above. Nothing is lost.
+
+**Know its limit:** billing data lags real spend by hours, so this is a safety net for *"I forgot dev
+was running for three weeks"* — **not** a real-time cap. It cannot stop a runaway as it happens.
+
 ## Test / run steps
 
 Terraform's own gates *are* the tests — they run in CI and locally:

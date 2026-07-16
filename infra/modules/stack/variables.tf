@@ -63,6 +63,37 @@ variable "enable_aggregate" {
   description = "Create A's nightly aggregate job + scheduler. Off until A's image exists and Valhalla is deployed, so C can deploy the ingest service without either."
 }
 
+# --- budget guard ---
+variable "billing_account" {
+  type        = string
+  default     = ""
+  description = "Billing account ID (e.g. 0X0X0X-0X0X0X-0X0X0X). Set it to create the budget + auto-shutoff guard; leave empty and none of that is created. The budget's parent is the billing account, which isn't discoverable from inside the project."
+}
+
+variable "budget_amount_usd" {
+  type        = number
+  default     = 50
+  description = "Monthly budget. Crossing budget_shutoff_threshold of this stops Cloud SQL + Valhalla."
+}
+
+variable "budget_alert_thresholds" {
+  type        = list(number)
+  default     = [0.5, 0.9, 1.0]
+  description = "Fractions of the budget that raise alerts. The early ones are a human's warning; only budget_shutoff_threshold triggers the stop."
+}
+
+variable "budget_shutoff_threshold" {
+  type        = number
+  default     = 1.0
+  description = "Fraction of the budget at which the guard stops billable resources. 1.0 = at budget."
+}
+
+variable "budget_notification_channels" {
+  type        = list(string)
+  default     = []
+  description = "Optional Monitoring notification channels to also alert. Billing admins are emailed regardless."
+}
+
 # --- Valhalla (map-matching) ---
 variable "enable_valhalla" {
   type        = bool
