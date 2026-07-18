@@ -63,6 +63,19 @@ variable "enable_aggregate" {
   description = "Create A's nightly aggregate job + scheduler. Off until A's image exists and Valhalla is deployed, so C can deploy the ingest service without either."
 }
 
+# --- Firebase Auth ---
+variable "enable_firebase_auth" {
+  type        = bool
+  default     = false
+  description = "Codify the Identity Platform email/password provider. Off by default: the first enablement of Identity Platform may need a one-time console kick, and it needs the identitytoolkit API + billing. App registration + config-file download stay a console/flutterfire step regardless."
+}
+
+variable "firebase_authorized_domains" {
+  type        = list(string)
+  default     = []
+  description = "Extra domains Firebase Auth accepts, beyond localhost + <project>.firebaseapp.com. Add the app's real hosts here as they exist."
+}
+
 # --- budget guard ---
 variable "billing_account" {
   type        = string

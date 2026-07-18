@@ -108,6 +108,7 @@ APIS=(
   cloudfunctions.googleapis.com   # the guard itself
   eventarc.googleapis.com         # delivers Pub/Sub to the gen2 function
   billingbudgets.googleapis.com   # the budget resource
+  identitytoolkit.googleapis.com  # Firebase Auth / Identity Platform (token verify + email/password)
 )
 info "enabling ${#APIS[@]} APIs (idempotent; may take a minute) ..."
 gcloud services enable "${APIS[@]}" >/dev/null || die "enabling APIs failed"

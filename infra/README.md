@@ -78,6 +78,45 @@ resource names don't collide and blast radius is contained. `variables.tf` +
   once, then uncomment it so state is shared, not local.
 - **Dev is disposable.** `deletion_protection = false` on the dev DB — do **not** carry that to prod.
 
+## Firebase Auth (the ingest API's identity)
+
+Every write to the ingest API carries a Firebase ID token: B's app signs the user in, C's
+`FirebaseAuth` verifies the token via the Admin SDK (`FIREBASE_PROJECT_ID`, already wired into the
+Cloud Run service). Both code sides are done — what's left is project setup, most of which is a
+console/CLI operation Terraform can't perform.
+
+**What's codified** (`enable_firebase_auth = true`): the Identity Platform email/password provider
+(`firebase.tf`). Off by default because the first-ever Identity Platform enablement in a project can
+need a one-time console kick.
+
+**What stays manual** (Firebase-project operations, not GCP resources):
+
+```bash
+# 1. Add Firebase to the existing GCP project (once):
+firebase projects:addfirebase fsd-benchmark-dev        # or the console: "add project" → pick it
+
+# 2. Enable Email/Password — either apply enable_firebase_auth=true, or:
+#    console → Authentication → Sign-in method → Email/Password → Enable
+
+# 3. Register the app + write config into B's tree (from the Flutter root):
+cd app && flutterfire configure --project fsd-benchmark-dev
+#    → generates lib/firebase_options.dart and drops google-services.json /
+#      GoogleService-Info.plist. B's main.dart still needs Firebase.initializeApp(...) wired
+#      (B left it as a TODO pending these files — see app/lib/main.dart).
+
+# 4. Create a test user (console → Authentication → Users → Add user), or via the Admin SDK.
+```
+
+**Then prove it works** — this is the single "it works" signal the multi-step setup otherwise lacks:
+
+```bash
+FIREBASE_API_KEY=<web-api-key> TEST_EMAIL=<user> TEST_PASSWORD=<pw> \
+  ./verify_firebase_auth.sh dev
+```
+
+It signs the test user in for a real token, POSTs to the deployed API with it (must get past auth),
+and POSTs without it (must be 401/403). Green means B's app will authenticate.
+
 ## Cost control
 
 Two resources are ~95% of any bill: **Cloud SQL** and the **Valhalla VM**. Both bill 24/7 whether
